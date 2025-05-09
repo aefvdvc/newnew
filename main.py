@@ -1,5 +1,5 @@
 import torch
-import torch.utils.data as data
+import torch.utils.data as torch_data
 from torchvision import datasets, transforms
 from model import RoundtripModel, compute_roundtrip_gmm_loss, visualize_latent_space
 from evaluate import evaluate
@@ -8,6 +8,7 @@ import logging
 import os
 import matplotlib.pyplot as plt
 import time
+from datetime import datetime  # 导入时间模块
 
 # 设置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -75,6 +76,27 @@ def plot_loss_curve(losses, save_dir):
     plt.savefig(os.path.join(save_dir, 'loss_curve.png'))
     plt.close()
 
+def save_model_with_timestamp(model, save_dir, epoch, loss=None):
+    """
+    保存模型并在文件名中加入时间戳和可选的额外信息。
+    """
+    # 获取当前时间戳
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')  # 格式：YYYYMMDD_HHMMSS
+
+    # 根据是否包含 loss 决定文件名格式
+    if loss is not None:
+        model_filename = f"model_epoch{epoch}_loss{loss:.4f}_{timestamp}.pth"
+    else:
+        model_filename = f"model_epoch{epoch}_{timestamp}.pth"
+
+    # 生成保存路径
+    model_path = os.path.join(save_dir, model_filename)
+
+    # 保存模型状态字典
+    torch.save(model.state_dict(), model_path)
+
+    logger.info(f"Model saved to {model_path}")
+
 def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="Roundtrip Model Training and Evaluation")
@@ -107,12 +129,13 @@ def main():
 
     # 加载数据集
     train_dataset = get_dataset(args.dataset, transform, train=True)
-    train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    train_loader = (torch_data
+                    .DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True))
 
     # 初始化模型、优化器和设备
     device = torch.device(args.device)
     model = RoundtripModel(input_dim=args.input_dim, latent_dim=args.latent_dim, n_components=args.n_components).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     # 训练模型
     model.train()
@@ -153,10 +176,9 @@ def main():
         # 保存重构图像
         save_reconstructed_images(model, train_loader, device, epoch, args.save_dir, args.dataset)
 
-    # 保存模型
-    if args.save_model:
-        torch.save(model.state_dict(), args.model_path)
-        logger.info(f"Model saved to {args.model_path}")
+        # 保存模型
+        if args.save_model:
+            save_model_with_timestamp(model, args.save_dir, epoch, avg_loss)
 
     # 可视化潜在空间
     visualize_latent_space(model, train_loader, device)

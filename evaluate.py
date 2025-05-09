@@ -1,5 +1,5 @@
 from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score, accuracy_score
-from sklearn.utils.linear_assignment import linear_assignment
+from scipy.optimize import linear_sum_assignment
 import numpy as np
 import torch
 
@@ -51,8 +51,9 @@ def evaluate(model, data_loader, device):
             cost_matrix[i, j] = np.sum((all_labels == i) & (all_preds == j))
 
     # 匈牙利算法计算最优匹配
-    matched_indices = linear_assignment(-cost_matrix)  # 使用负的成本矩阵进行最大化匹配
-
+    #matched_indices = linear_sum_assignment(-cost_matrix)  # 使用负的成本矩阵进行最大化匹配
+    row_indices, col_indices = linear_sum_assignment(-cost_matrix)
+    matched_indices = list(zip(row_indices, col_indices))
     # 通过匹配结果重新映射聚类标签
     new_preds = np.copy(all_preds)
     for i, j in matched_indices:
