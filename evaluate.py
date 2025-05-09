@@ -31,6 +31,10 @@ def evaluate(model, data_loader, device):
             # 获取模型的潜在空间表示（即编码器输出）
             z_enc = model.encoder(x)
 
+            # 检查潜在空间维度是否匹配
+            if z_enc.size(1) != model.gmm.latent_dim:
+                raise ValueError(
+                    f"编码器输出维度 ({z_enc.size(1)}) 与 GMM 的潜在空间维度 ({model.gmm.latent_dim}) 不匹配！")
             # 使用 GMM 对潜在空间进行聚类预测
             preds = model.gmm.predict(z_enc)
 
