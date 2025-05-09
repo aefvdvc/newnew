@@ -33,9 +33,11 @@ class GMM(nn.Module):
         mu = self.mu.unsqueeze(0)
         log_var = self.log_var.unsqueeze(0)
 
-        log_prob = -0.5 * (log_var + (z - mu)**2 / torch.exp(log_var) + np.log(2 * np.pi))
+        # 使用 log_softmax 提升数值稳定性
+        log_pi = F.log_softmax(self.pi, dim=0)
+        log_prob = -0.5 * (log_var + (z - mu) ** 2 / torch.exp(log_var) + np.log(2 * np.pi))
         log_prob = log_prob.sum(-1)
-        log_prob = log_prob + torch.log(self.pi + 1e-10)
+        log_prob = log_prob + log_pi
 
         log_sum_exp = torch.logsumexp(log_prob, dim=1, keepdim=False)
         return -log_sum_exp.mean()
