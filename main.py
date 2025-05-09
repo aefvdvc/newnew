@@ -27,7 +27,7 @@ def get_dataset(dataset_name, transform, train=True):
         datasets.VisionDataset: The loaded dataset.
     """
     if dataset_name == "MNIST":
-        return datasets.MNIST('./data', train=train, download=False, transform=transform)
+        return datasets.MNIST('./data', train=train, download=True, transform=transform)
     elif dataset_name == "CIFAR10":
         return datasets.CIFAR10('./data', train=train, download=True, transform=transform)
     elif dataset_name == "FashionMNIST":
@@ -53,11 +53,11 @@ def save_reconstructed_images(model, data_loader, device, epoch, save_dir, datas
         else:
             axes[0, i].imshow(data[i].cpu().numpy().reshape(28, 28), cmap='gray')
         axes[0, i].axis('off')
-        # 重构图像
+        # 重构图像（添加 .clamp(0, 1) 以确保可视化范围正确）
         if dataset_name == "CIFAR10":
-            axes[1, i].imshow(x_recon[i].cpu().numpy().transpose(1, 2, 0))
+            axes[1, i].imshow(x_recon[i].clamp(0, 1).cpu().numpy().transpose(1, 2, 0))
         else:
-            axes[1, i].imshow(x_recon[i].cpu().numpy().reshape(28, 28), cmap='gray')
+            axes[1, i].imshow(x_recon[i].clamp(0, 1).cpu().numpy().reshape(28, 28), cmap='gray')
         axes[1, i].axis('off')
 
     plt.savefig(os.path.join(save_dir, f'reconstructed_images_epoch_{epoch}.png'))
@@ -124,7 +124,7 @@ def main():
     else:
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Lambda(lambda x: x.view(-1))
+            transforms.Normalize((0.5,), (0.5,))
         ])
 
     # 加载数据集
@@ -136,6 +136,7 @@ def main():
     device = torch.device(args.device)
     model = RoundtripModel(input_dim=args.input_dim, latent_dim=args.latent_dim, n_components=args.n_components).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)  # 学习率调度器
 
     # 训练模型
     model.train()
@@ -171,7 +172,7 @@ def main():
         losses['loss_kl'].append(avg_loss_kl)
         losses['loss_rt'].append(avg_loss_rt)
 
-        logger.info(f"Epoch {epoch + 1}/{args.epochs}, Total Loss: {avg_loss:.4f}, Reconstruction Loss: {avg_loss_x:.4f}, KL Divergence Loss: {avg_loss_kl:.4f}, Roundtrip Loss: {avg_loss_rt:.4f}")
+        logger.info(f"Epoch {epoch + 1}/{args.epochs}, Total Loss: {avg_loss:.4f}, Reconstruction Loss: {avg_loss_x:.4f}, KL Divergence Loss: {avg_loss_kl:.4f}, Roundtrip Loss: {avg_loss_rt:.4f}, Learning Rate: {scheduler.get_last_lr()[0]:.6f}")
 
         # 保存重构图像
         save_reconstructed_images(model, train_loader, device, epoch, args.save_dir, args.dataset)
@@ -179,6 +180,9 @@ def main():
         # 保存模型
         if args.save_model:
             save_model_with_timestamp(model, args.save_dir, epoch, avg_loss)
+
+        # 更新学习率
+        scheduler.step()
 
     # 可视化潜在空间
     visualize_latent_space(model, train_loader, device)
